@@ -59,20 +59,23 @@ def get_label_list_x(size, num_colors):
     return label_list
 
 
-def get_label_list_y(flow):
+def get_label_list_z(flow):
     label_list = []
     for i in range(flow.get_size):
+        for j in range(flow.get_size - 1):
+            for c in range(flow.get_num_colors):
+                label_list.append("z_" + get_label(i, j, c) + ",h")
+    for i in range(flow.get_size - 1):
         for j in range(flow.get_size):
             for c in range(flow.get_num_colors):
-                for nb in range(flow.get_num_helpers[i, j]):
-                    label_list.append("y_" + get_label(i, j, c) + "," + str(nb))
+                label_list.append("z_" + get_label(i, j, c) + ",v")
     return label_list
 
 
 def sample_to_tensor(items, initial_tensor):
     for item in items:
         label, value = item
-        if label.split('_')[0] == 'y':
+        if label.split('_')[0] == 'z':
             continue
         x, y, color = get_tensor_index(label)
         initial_tensor[x, y, color] = int(value)
@@ -80,9 +83,9 @@ def sample_to_tensor(items, initial_tensor):
     return initial_tensor
 
 
-def build_bqm(flow, label_list_x, label_list_y, strength=1):
+def build_bqm(flow, label_list_x, label_list_z, strength=1):
     x = [Binary(label) for label in label_list_x]
-    y = [Binary(label) for label in label_list_y]
+    z = [Binary(label) for label in label_list_z]
     H = 0
     """
     # Constraint: start and end nodes have one neighbour of the same colour
@@ -101,6 +104,7 @@ def build_bqm(flow, label_list_x, label_list_y, strength=1):
     #model = H.compile()
     print(H)
     """
+    """
     for p in flow.get_all_positions:
         num_nb = flow.get_num_helpers[p[0], p[1]]
         nb_coords = flow.get_neighbour_coordinates(p)
@@ -111,39 +115,60 @@ def build_bqm(flow, label_list_x, label_list_y, strength=1):
     for p in flow.get_all_except_initial_positions:
         for c in range(flow.get_num_colors):
             H += x[flow.get_x_index(p, c)] * sum((n - 2)**2 * y[flow.get_y_index(p, c, n)] for n in range(num_nb))
+"""
+    def getZEnergy(list, constant):        
+        E = 0
+        for p in list:
+            if constant == 1:
+                print("check init: " + str(p))
+            edges = flow.get_edges(p)
+            tmp = 0
+            for c in range(flow.get_num_colors):
+                tmp += sum(z[flow.get_z_index(edge, c)] for edge in edges)
+            E += (tmp - constant)**2
+        return E
 
-    for p in flow.get_initial_positions(flattened=True):
-        for c in range(flow.get_num_colors):
-            H += x[flow.get_x_index(p, c)] * sum((n - 1)**2 * y[flow.get_y_index(p, c, n)] for n in range(num_nb))
+    H += getZEnergy(flow.get_initial_positions(flattened=True), 1)
+    H += getZEnergy(flow.get_all_except_initial_positions, 2)
+    
+    def applyAndGate(ls, rs, side):
+        def f(a, b, c):
+            return a * b - 2 * (a + b) * c + 3 * c
+        
+        E = 0
+        for i in range(ls):
+            for j in range(rs):
+                for c in range(flow.get_num_colors):
+                    E += f(x[flow.get_x_index(flow.get_minus(np.array([side, i, j])), c)], x[flow.get_x_index(flow.get_plus(np.array([side, i, j])), c)], z[flow.get_z_index(np.array([side, i, j]), c)])
+        return E
+   
+    # Horizontal
+    H += applyAndGate(flow.get_size, flow.get_size - 1, 0)
+    
+    # Vertical
+    H += applyAndGate(flow.get_size - 1, flow.get_size, 1)
 
+    # And compile
     bqm = H.compile().to_bqm()
 
     # Constraint: every position can only have one color
     for p in flow.get_all_positions:
         color_labels = [label_list_x[flow.get_x_index(p, c)] for c in range(flow.get_num_colors)]
-        print(color_labels)
+        # TODO: update strength!!!!
         color_bqm = combinations(color_labels, 1, strength=3*strength)
-        
-        print(color_bqm)
-        
         bqm.update(color_bqm)
-        num_nb = flow.get_num_helpers[p[0], p[1]]
-        # Constraint : exactly one helper bit is 1 per position, color
-        for c in range(flow.get_num_colors):
-            helper_labels = [label_list_y[flow.get_y_index(p, c, n)] for n in range(num_nb)]
-            helper_bqm = combinations(helper_labels, 1, strength=2*strength)
-            bqm.update(helper_bqm)
 
     # Constraint: fix known values
     tensor = flow.get_tensor
-    print(flow.get_initial_positions())
+    
+    print(flow.get_initial_positions(flattened=True))
+    
     for p in flow.get_initial_positions(flattened=True):
         for c in range(flow.get_num_colors):
-            print("fix: " + str(get_label(p[0], p[1], c)) + " " + str(tensor[p[0], p[1], c]))
+            print("fix: " + "x_" + str(get_label(p[0], p[1], c)))
             bqm.fix_variable("x_" + get_label(p[0], p[1], c), tensor[p[0], p[1], c])
-
+    # TODO: fix also edges between initial nodes
     return bqm
-
 
 def solve_flow(color_pairs, size, num_colors, plot_init=False, plot_error=False, num_reads=1, strength=1):
     flow = fl.Flow(size, num_colors)
@@ -154,19 +179,22 @@ def solve_flow(color_pairs, size, num_colors, plot_init=False, plot_error=False,
         flow.plot_flow()
 
     label_list_x = get_label_list_x(size, num_colors)
-    label_list_y = get_label_list_y(flow)
-    bqm = build_bqm(flow, label_list_x, label_list_y)
+    label_list_z = get_label_list_z(flow)
+    bqm = build_bqm(flow, label_list_x, label_list_z)
     #print(bqm)
     #sampler = Kerberos()#EmbeddingComposite(DWaveSampler())
-    sampler = LeapHybridSampler()
-    print("Sending problem...")
-    #sample_set = sampler.sample(bqm)#, num_reads=num_reads)
-    print("Results from D-Wave:")
-    print(sample_set)
-    sample_set.to_pandas_dataframe().to_csv("results/flow_experiment_"+str(get_storage_index())+".csv")
-    best_solution = sample_set.lowest().first.sample
-    for item in best_solution.items():
-        print(item)
+    
+    
+    if True:
+        sampler = LeapHybridSampler()
+        print("Sending problem...")
+        sample_set = sampler.sample(bqm)#, num_reads=num_reads)
+        print("Results from D-Wave:")
+        print(sample_set)
+        sample_set.to_pandas_dataframe().to_csv("results/flow_experiment_"+str(get_storage_index())+".csv")
+        best_solution = sample_set.lowest().first.sample
+        for item in best_solution.items():
+            print(item)
 
     # Testing
     """
@@ -200,7 +228,7 @@ def solve_flow(color_pairs, size, num_colors, plot_init=False, plot_error=False,
 
     solution = sample_to_tensor(best_solution.items(), flow.get_tensor)
     flow.set_solution_tensor(solution)
-    if plot_error:
-        flow.plot_error(best_solution)
+    #if plot_error:
+    #    flow.plot_error(best_solution)
 
     return flow

@@ -67,11 +67,12 @@ class Flow:
     def get_x_index(self, pos, color):
         return color + self.get_num_colors * pos[1] + self.get_num_colors * self.get_size * pos[0]
 
-    def get_y_index(self, pos, color, num):
-        rowsums = self.get_num_helpers.sum(axis=0)
-        return num + color * self.get_num_helpers[pos[0], pos[1]] + \
-               sum(self.get_num_helpers[pos[0], i] for i in range(pos[1])) * self.get_num_colors + \
-               sum(rowsums[i] for i in range(pos[0])) * self.get_num_colors
+    def get_z_index(self, edge, color):
+        # Vertical?
+        if edge[0]:
+            return self.get_num_colors * self.get_size * (self.get_size - 1) + color + self.get_num_colors * edge[2] + self.get_num_colors * self.get_size * edge[1]
+        else:
+            return color + self.get_num_colors * edge[2] + self.get_num_colors * (self.get_size - 1) * edge[1]
 
     # add two points of a color, needed for initialization of flow problem tensor,
     # pos1 and pos2 are arrays with x and y coordinate each, color must be a string
@@ -100,6 +101,30 @@ class Flow:
             if pos[i] < self.get_size - 1:
                 neighbours.append(np.array(pos) + np.array([(i + 1) % 2, i % 2]))
         return np.array(neighbours)
+
+    def get_edges(self, pos):
+        edges = []
+        for i in range(2):
+            if pos[i] > 0:
+                edges.append(np.array([1 - i, pos[0], pos[1]]) - np.array([0, (i + 1) % 2, i % 2]))
+            if pos[i] < self.get_size - 1:
+                edges.append(np.array([1 - i, pos[0], pos[1]]) + np.array([0, 0, 0]))
+        print("pos=" + str(pos) + " - neigh=" + str(edges))
+        return np.array(edges)
+
+    def get_minus(self, edge):
+        # Vertical?
+        if edge[0]:
+            return np.array([edge[1], edge[2]])
+        else:
+            return np.array([edge[1], edge[2]])
+        
+    def get_plus(self, edge):
+        # Vertical?
+        if edge[0]:
+            return np.array([edge[1] + 1, edge[2]])
+        else:
+            return np.array([edge[1], edge[2] + 1])
 
     # takes a start position and color as an input and draws the flow from there, always in
     # the direction of the neighbouring field that has a 1 value of the same color. It will
