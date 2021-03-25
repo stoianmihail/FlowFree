@@ -128,8 +128,8 @@ def build_bqm(flow, label_list_x, label_list_z, strength=1):
             E += (tmp - constant)**2
         return E
 
-    H += getZEnergy(flow.get_initial_positions(flattened=True), 1)
-    H += getZEnergy(flow.get_all_except_initial_positions, 2)
+    H += 0.5 * getZEnergy(flow.get_initial_positions(flattened=True), 1)
+    H += 0.5 * getZEnergy(flow.get_all_except_initial_positions, 2)
     
     def applyAndGate(ls, rs, side):
         def f(a, b, c):
@@ -155,7 +155,7 @@ def build_bqm(flow, label_list_x, label_list_z, strength=1):
     for p in flow.get_all_positions:
         color_labels = [label_list_x[flow.get_x_index(p, c)] for c in range(flow.get_num_colors)]
         # TODO: update strength!!!!
-        color_bqm = combinations(color_labels, 1, strength=3*strength)
+        color_bqm = combinations(color_labels, 1, strength=strength)
         bqm.update(color_bqm)
 
     # Constraint: fix known values
@@ -173,6 +173,7 @@ def build_bqm(flow, label_list_x, label_list_z, strength=1):
 def solve_flow(color_pairs, size, num_colors, plot_init=False, plot_error=False, num_reads=1, strength=1):
     flow = fl.Flow(size, num_colors)
     for pair in color_pairs:
+        print(pair)
         flow.add_color_pair(pair[0], pair[1], pair[2])
 
     if plot_init:

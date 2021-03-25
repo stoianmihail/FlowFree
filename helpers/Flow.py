@@ -83,6 +83,8 @@ class Flow:
         self._colors.append(color)
         self._initial_positions.append([pos1, pos2])
 
+        print("pos1=" + str(pos1) + " pos2=" + str(pos2) + " color_index=" + str(color_index))
+
         self._tensor[pos1][color_index] = 1
         self._tensor[pos2][color_index] = 1
 
@@ -195,7 +197,7 @@ class Flow:
             points = np.array(self.get_initial_positions()[i])
             x = points[:, 1]
             y = points[:, 0]
-            plt.scatter(x, y, s=1200, c=self.get_colors[i])
+            plt.scatter(x, y, s=500, c=self.get_colors[i])
 
         plt.grid()
 
@@ -263,7 +265,7 @@ class Flow:
             color_error = int(sum(self.get_tensor[p[0], p[1], c] for c in range(self.get_num_colors)))
             if color_error > 4:
                 color_error = 4
-            plt.scatter(p[1], p[0], marker="s", s=2000, c=colors[color_error])
+            plt.scatter(p[1], p[0], marker="s", s=500, c=colors[color_error])
 
         for p in self.get_all_positions:
             neighbour_error = 0
@@ -277,7 +279,7 @@ class Flow:
             if neighbour_error > 3:
                 neighbour_error = 3
             neighbour_error = int(neighbour_error)
-            plt.scatter(p[1], p[0], marker="s", s=600, c=colors[neighbour_error + 1])
+            plt.scatter(p[1], p[0], marker="s", s=500, c=colors[neighbour_error + 1])
 
         error_matrix = np.zeros((self.get_size, self.get_size))
 
