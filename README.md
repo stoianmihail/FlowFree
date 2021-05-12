@@ -3,9 +3,9 @@
 Solving the FlowFree game with quantum annealing:
 
 ## Run
-To run one example for 5x5:
+To run one example for 7x7 (the image below):
 ```
-python main.py data/5/1.json
+python main.py data/7/1.json
 ```
 
 ![alt text](https://github.com/stoianmihail/FlowFree/blob/main/images/8x8-initial.png?raw=true)
